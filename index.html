@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrediMercado - Controle de Fiado</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="loginScreen" class="login-screen">
+      <div class="login-info">
+        <div class="logo">CM</div>
+        <p class="kicker">CrediMercado</p>
+        <h1>Sistema de cobrança para mercado</h1>
+        <p>Controle clientes, fiado, pagamentos, vencimentos e cobranças pelo WhatsApp em uma tela simples.</p>
+      </div>
+
+      <form id="loginForm" class="login-card">
+        <div>
+          <p class="kicker">Acesso restrito</p>
+          <h2>Entrar no sistema</h2>
+        </div>
+        <label>
+          Usuário
+          <input id="loginUsername" required autocomplete="username" placeholder="admin" />
+        </label>
+        <label>
+          Senha
+          <input id="loginPassword" required type="password" autocomplete="current-password" placeholder="admin123" />
+        </label>
+        <p id="loginMessage" class="message"></p>
+        <button class="primary" type="submit">Entrar</button>
+        <small>Primeiro acesso: <strong>admin</strong> / <strong>admin123</strong></small>
+      </form>
+    </section>
+
+    <section id="appScreen" class="app-screen hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">CM</div>
+          <div>
+            <strong>CrediMercado</strong>
+            <span>Controle de Fiado</span>
+          </div>
+        </div>
+
+        <nav>
+          <button class="nav active" data-page="dashboard" type="button">Painel</button>
+          <button class="nav" data-page="clients" type="button">Clientes</button>
+          <button class="nav" data-page="users" type="button">Usuários</button>
+        </nav>
+
+        <div class="user-box">
+          <span id="loggedUser"></span>
+          <button id="logoutBtn" type="button">Sair</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="kicker">Gestão do mercado</p>
+            <h1>Controle de Fiado</h1>
+          </div>
+        </header>
+
+        <section id="dashboardPage">
+          <section class="stats">
+            <article>
+              <span>Total em aberto</span>
+              <strong id="totalOpen">R$ 0,00</strong>
+            </article>
+            <article>
+              <span>Clientes devendo</span>
+              <strong id="debtorsCount">0</strong>
+            </article>
+            <article>
+              <span>Dívidas vencidas</span>
+              <strong id="overdueCount">0</strong>
+            </article>
+            <article>
+              <span>Recebido no mês</span>
+              <strong id="monthPaid">R$ 0,00</strong>
+            </article>
+          </section>
+
+          <section class="forms-grid">
+            <article class="panel">
+              <div class="panel-title">
+                <p class="kicker">Venda fiada</p>
+                <h2>Novo lançamento</h2>
+              </div>
+              <form id="debtForm" class="form-grid">
+                <label>
+                  Cliente
+                  <input id="customerName" required placeholder="Nome do cliente" />
+                </label>
+                <label>
+                  Telefone
+                  <input id="customerPhone" placeholder="(00) 00000-0000" inputmode="tel" />
+                </label>
+                <label>
+                  Valor
+                  <input id="debtAmount" required type="number" min="0.01" step="0.01" placeholder="0,00" />
+                </label>
+                <label>
+                  Vencimento
+                  <input id="dueDate" type="date" />
+                </label>
+                <label class="full">
+                  Observação
+                  <input id="debtNote" placeholder="Ex.: compras da semana" />
+                </label>
+                <button class="primary full" type="submit">Adicionar dívida</button>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-title">
+                <p class="kicker">Recebimento</p>
+                <h2>Registrar pagamento</h2>
+              </div>
+              <form id="paymentForm" class="form-grid">
+                <label class="full">
+                  Cliente
+                  <select id="paymentCustomer" required>
+                    <option value="">Selecione um cliente</option>
+                  </select>
+                </label>
+                <label>
+                  Valor pago
+                  <input id="paymentAmount" required type="number" min="0.01" step="0.01" placeholder="0,00" />
+                </label>
+                <label>
+                  Data
+                  <input id="paymentDate" type="date" />
+                </label>
+                <label class="full">
+                  Forma de pagamento
+                  <select id="paymentMethod" required>
+                    <option value="Pix">Pix</option>
+                    <option value="Cartão de débito">Cartão de débito</option>
+                    <option value="Cartão de crédito">Cartão de crédito</option>
+                    <option value="Dinheiro">Dinheiro</option>
+                  </select>
+                </label>
+                <label class="full">
+                  Observação
+                  <input id="paymentNote" placeholder="Ex.: comprovante, troco, observação" />
+                </label>
+                <button class="secondary full" type="submit">Registrar pagamento</button>
+              </form>
+            </article>
+          </section>
+
+          <section class="panel customers-panel">
+            <div class="list-header">
+              <div>
+                <p class="kicker">Carteira</p>
+                <h2>Clientes e débitos</h2>
+                <span id="dashboardResultCount">0 clientes encontrados</span>
+              </div>
+            </div>
+            <div id="dashboardCustomerList" class="customer-list"></div>
+          </section>
+
+        </section>
+
+        <section id="clientsPage" class="hidden">
+          <section class="panel customers-panel">
+            <div class="list-header">
+              <div>
+                <p class="kicker">Carteira</p>
+                <h2>Todos os clientes</h2>
+                <span id="resultCount">0 clientes encontrados</span>
+              </div>
+              <div class="filters">
+                <input id="searchInput" placeholder="Buscar cliente ou telefone" />
+                <select id="statusFilter">
+                  <option value="all">Todos</option>
+                  <option value="open">Devendo</option>
+                  <option value="overdue">Vencidos</option>
+                  <option value="paid">Quitados</option>
+                </select>
+              </div>
+            </div>
+            <div id="customerList" class="customer-list"></div>
+          </section>
+        </section>
+
+        <section id="usersPage" class="hidden">
+          <section class="stats admin-stats">
+            <article>
+              <span>Usuários ativos</span>
+              <strong id="activeUsersCount">0</strong>
+            </article>
+            <article>
+              <span>Bloqueados</span>
+              <strong id="blockedUsersCount">0</strong>
+            </article>
+            <article>
+              <span>Lançamentos no mês</span>
+              <strong id="monthActionsCount">0</strong>
+            </article>
+            <article>
+              <span>Último backup</span>
+              <strong id="lastBackupLabel">Nunca</strong>
+            </article>
+          </section>
+
+          <section class="forms-grid">
+            <article class="panel">
+              <div class="panel-title">
+                <p class="kicker">Equipe</p>
+                <h2>Novo usuário</h2>
+              </div>
+              <form id="userForm" class="form-grid">
+                <label>
+                  Nome
+                  <input id="newUserName" required placeholder="Nome do funcionário" />
+                </label>
+                <label>
+                  Usuário
+                  <input id="newUsername" required placeholder="ex.: caixa01" />
+                </label>
+                <label>
+                  Senha
+                  <input id="newUserPassword" required type="password" minlength="4" placeholder="Mínimo 4 caracteres" />
+                </label>
+                <label>
+                  Perfil
+                  <select id="newUserRole">
+                    <option>Administrador</option>
+                    <option>Operador</option>
+                    <option>Caixa</option>
+                    <option>Somente leitura</option>
+                  </select>
+                </label>
+                <button class="primary full" type="submit">Cadastrar usuário</button>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-title">
+                <p class="kicker">Acessos</p>
+                <h2>Usuários cadastrados</h2>
+              </div>
+              <div id="usersList" class="users-list"></div>
+            </article>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-title">
+              <p class="kicker">Configurações</p>
+              <h2>Dados do mercado</h2>
+            </div>
+            <form id="settingsForm" class="form-grid">
+              <label>
+                Nome do mercado
+                <input id="marketName" placeholder="Ex.: Mercado São José" />
+              </label>
+              <label>
+                Telefone do mercado
+                <input id="marketPhone" placeholder="(00) 00000-0000" inputmode="tel" />
+              </label>
+              <label>
+                Limite por lançamento de operador
+                <input id="operatorLimit" type="number" min="0" step="0.01" placeholder="0,00" />
+              </label>
+              <label class="full">
+                Mensagem padrão de cobrança
+                <input id="chargeMessage" placeholder="Mensagem enviada no WhatsApp" />
+              </label>
+              <button class="primary full" type="submit">Salvar configurações</button>
+            </form>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-title">
+              <p class="kicker">Configurações</p>
+              <h2>Backup do sistema</h2>
+            </div>
+            <p class="settings-note" id="backupStatus">Nenhum backup exportado ainda.</p>
+            <div class="settings-actions">
+              <button id="exportBtn" type="button">Exportar backup</button>
+              <label class="import-btn">
+                Importar backup
+                <input id="importInput" type="file" accept="application/json" />
+              </label>
+            </div>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="panel-title">
+              <p class="kicker">Auditoria</p>
+              <h2>Histórico de ações</h2>
+            </div>
+            <div class="audit-filters">
+              <input id="auditSearch" placeholder="Buscar por usuário, cliente ou ação" />
+              <input id="auditDate" type="date" />
+            </div>
+            <div id="auditList" class="audit-list"></div>
+          </section>
+        </section>
+      </main>
+    </section>
+
+    <template id="customerTemplate">
+      <article class="customer-card">
+        <div class="customer-top">
+          <div>
+            <h3></h3>
+            <p class="phone"></p>
+          </div>
+          <strong class="balance"></strong>
+        </div>
+        <div class="badges"></div>
+        <div class="entries"></div>
+        <div class="card-actions">
+          <button class="whatsapp" type="button">Cobrar no WhatsApp</button>
+          <button class="danger" type="button">Excluir</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
