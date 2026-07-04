@@ -572,6 +572,7 @@ nav {
 }
 
 .companies-list,
+.platform-customers-list,
 .owner-checklist {
   display: grid;
   gap: 10px;
@@ -586,7 +587,8 @@ nav {
   font-weight: 800;
 }
 
-.company-card {
+.company-card,
+.platform-customer-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -598,15 +600,19 @@ nav {
 }
 
 .company-card h3,
-.company-card span {
+.company-card span,
+.platform-customer-card h3,
+.platform-customer-card span {
   display: block;
 }
 
-.company-card h3 {
+.company-card h3,
+.platform-customer-card h3 {
   font-size: 1.05rem;
 }
 
-.company-card span {
+.company-card span,
+.platform-customer-card span {
   color: var(--muted);
   font-size: 0.88rem;
 }
@@ -780,6 +786,7 @@ nav {
   .card-actions,
   .user-row,
   .company-card,
+  .platform-customer-card,
   .audit-row {
     align-items: stretch;
     flex-direction: column;

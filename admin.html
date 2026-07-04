@@ -45,7 +45,8 @@
         </div>
 
         <nav>
-          <button class="nav active" type="button">Empresas</button>
+          <button class="nav active" data-platform-page="companies" type="button">Empresas</button>
+          <button class="nav" data-platform-page="customers" type="button">Clientes</button>
         </nav>
 
         <div class="user-box">
@@ -84,6 +85,7 @@
           </article>
         </section>
 
+        <section id="platformCompaniesPage">
         <section class="forms-grid">
           <article class="panel">
             <div class="panel-title">
@@ -142,6 +144,28 @@
             </div>
           </div>
           <div id="companiesList" class="companies-list"></div>
+        </section>
+        </section>
+
+        <section id="platformCustomersPage" class="hidden">
+          <section class="panel customers-panel">
+            <div class="list-header">
+              <div>
+                <p class="kicker">Clientes de todos os mercados</p>
+                <h2>Todos os clientes</h2>
+                <span id="platformCustomersResultCount">0 clientes encontrados</span>
+              </div>
+              <div class="filters">
+                <input id="platformCustomerSearch" placeholder="Buscar cliente, telefone ou mercado" />
+                <select id="platformCustomerStatus">
+                  <option value="all">Todos</option>
+                  <option value="open">Devendo</option>
+                  <option value="paid">Quitados</option>
+                </select>
+              </div>
+            </div>
+            <div id="platformCustomersList" class="platform-customers-list"></div>
+          </section>
         </section>
       </main>
     </section>

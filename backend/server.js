@@ -353,6 +353,49 @@ async function loadPlatformCompanies() {
   }));
 }
 
+async function loadPlatformCustomers() {
+  const result = await db.query(
+    `select
+       c.id,
+       c.nome,
+       c.telefone,
+       c.criado_em,
+       e.id as empresa_id,
+       e.nome as empresa_nome,
+       coalesce(l.total, 0) as lancamentos,
+       coalesce(l.saldo, 0) as saldo,
+       l.ultimo_lancamento,
+       l.proximo_vencimento
+     from clientes c
+     join empresas e on e.id = c.empresa_id
+     left join (
+       select
+         empresa_id,
+         cliente_id,
+         count(*) as total,
+         sum(case when tipo = 'debt' then valor when tipo = 'payment' then -valor else 0 end) as saldo,
+         max(criado_em) as ultimo_lancamento,
+         min(case when tipo = 'debt' and vencimento >= current_date then vencimento end) as proximo_vencimento
+       from lancamentos
+       group by empresa_id, cliente_id
+     ) l on l.empresa_id = c.empresa_id and l.cliente_id = c.id
+     order by e.nome asc, c.nome asc`
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    name: row.nome,
+    phone: row.telefone || "",
+    createdAt: row.criado_em,
+    companyId: row.empresa_id,
+    companyName: row.empresa_nome,
+    entriesCount: Number(row.lancamentos || 0),
+    balance: Number(row.saldo || 0),
+    lastEntryAt: row.ultimo_lancamento || "",
+    nextDueDate: row.proximo_vencimento || "",
+  }));
+}
+
 async function handleApi(request, response, pathname) {
   if (request.method === "OPTIONS") return sendJson(response, 200, { ok: true });
 
@@ -381,6 +424,10 @@ async function handleApi(request, response, pathname) {
 
     if (request.method === "GET" && pathname === "/api/platform/companies") {
       return sendJson(response, 200, { companies: await loadPlatformCompanies() });
+    }
+
+    if (request.method === "GET" && pathname === "/api/platform/customers") {
+      return sendJson(response, 200, { customers: await loadPlatformCustomers() });
     }
 
     if (request.method === "POST" && pathname === "/api/platform/companies") {

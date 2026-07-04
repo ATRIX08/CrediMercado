@@ -2,6 +2,7 @@ const PLATFORM_TOKEN_KEY = "credimercado_platform_token_v1";
 const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:3000" : "";
 
 let companies = [];
+let customers = [];
 
 const money = (value) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
@@ -53,11 +54,30 @@ async function loadCompanies() {
   companies = result.companies || [];
 }
 
+async function loadCustomers() {
+  const result = await platformApi("/api/platform/customers");
+  customers = result.customers || [];
+}
+
 function filteredCompanies() {
   const query = normalize(document.querySelector("#companySearch").value);
   return companies.filter((company) => {
     return !query || normalize(`${company.marketName} ${company.marketPhone}`).includes(query);
   });
+}
+
+function filteredCustomers() {
+  const query = normalize(document.querySelector("#platformCustomerSearch").value);
+  const status = document.querySelector("#platformCustomerStatus").value;
+  return customers
+    .filter((customer) => {
+      const queryOk =
+        !query || normalize(`${customer.name} ${customer.phone} ${customer.companyName}`).includes(query);
+      const balance = Number(customer.balance || 0);
+      const statusOk = status === "all" || (status === "open" && balance > 0) || (status === "paid" && balance <= 0);
+      return queryOk && statusOk;
+    })
+    .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0));
 }
 
 function renderStats() {
@@ -104,9 +124,43 @@ function renderCompanies() {
   });
 }
 
+function renderCustomers() {
+  const list = document.querySelector("#platformCustomersList");
+  const items = filteredCustomers();
+
+  list.innerHTML = "";
+  document.querySelector("#platformCustomersResultCount").textContent =
+    items.length === 1 ? "1 cliente encontrado" : `${items.length} clientes encontrados`;
+
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">Nenhum cliente para mostrar.</div>';
+    return;
+  }
+
+  items.forEach((customer) => {
+    const balance = Number(customer.balance || 0);
+    const row = document.createElement("article");
+    row.className = "platform-customer-card";
+    row.innerHTML = `
+      <div>
+        <h3>${customer.name}</h3>
+        <span>${customer.phone || "Sem telefone"} - ${customer.companyName}</span>
+      </div>
+      <div class="company-metrics">
+        <span>${balance > 0 ? "Devendo" : "Quitado"}</span>
+        <span>${customer.entriesCount} lancamento(s)</span>
+        <span>${customer.nextDueDate ? `Vence ${dateTimeLabel(customer.nextDueDate).split(",")[0]}` : "Sem vencimento"}</span>
+        <strong>${money(Math.max(balance, 0))}</strong>
+      </div>
+    `;
+    list.append(row);
+  });
+}
+
 function render() {
   renderStats();
   renderCompanies();
+  renderCustomers();
 }
 
 async function restorePlatformSession() {
@@ -116,7 +170,7 @@ async function restorePlatformSession() {
   }
 
   try {
-    await loadCompanies();
+    await Promise.all([loadCompanies(), loadCustomers()]);
     showPlatformApp();
     render();
   } catch {
@@ -137,7 +191,7 @@ document.querySelector("#platformLoginForm").addEventListener("submit", async (e
     sessionStorage.setItem(PLATFORM_TOKEN_KEY, result.token);
     document.querySelector("#platformLoginMessage").textContent = "";
     event.target.reset();
-    await loadCompanies();
+    await Promise.all([loadCompanies(), loadCustomers()]);
     showPlatformApp();
     render();
   } catch (error) {
@@ -162,7 +216,7 @@ document.querySelector("#companyForm").addEventListener("submit", async (event) 
     });
     event.target.reset();
     document.querySelector("#companyMessage").textContent = "Mercado criado com sucesso.";
-    await loadCompanies();
+    await Promise.all([loadCompanies(), loadCustomers()]);
     render();
   } catch (error) {
     document.querySelector("#companyMessage").textContent = error.message;
@@ -172,12 +226,13 @@ document.querySelector("#companyForm").addEventListener("submit", async (event) 
 document.querySelector("#platformLogoutBtn").addEventListener("click", () => {
   sessionStorage.removeItem(PLATFORM_TOKEN_KEY);
   companies = [];
+  customers = [];
   showPlatformLogin();
 });
 
 document.querySelector("#refreshCompaniesBtn").addEventListener("click", async () => {
   try {
-    await loadCompanies();
+    await Promise.all([loadCompanies(), loadCustomers()]);
     render();
   } catch (error) {
     alert(error.message);
@@ -185,5 +240,20 @@ document.querySelector("#refreshCompaniesBtn").addEventListener("click", async (
 });
 
 document.querySelector("#companySearch").addEventListener("input", renderCompanies);
+document.querySelector("#platformCustomerSearch").addEventListener("input", renderCustomers);
+document.querySelector("#platformCustomerStatus").addEventListener("change", renderCustomers);
+
+document.querySelectorAll("[data-platform-page]").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("[data-platform-page]").forEach((item) => item.classList.remove("active"));
+    button.classList.add("active");
+    document
+      .querySelector("#platformCompaniesPage")
+      .classList.toggle("hidden", button.dataset.platformPage !== "companies");
+    document
+      .querySelector("#platformCustomersPage")
+      .classList.toggle("hidden", button.dataset.platformPage !== "customers");
+  });
+});
 
 restorePlatformSession();
