@@ -9,6 +9,7 @@ require("./read-env");
 const PORT = Number(process.env.PORT || 3000);
 const rootDir = path.join(__dirname, "..");
 const sessions = new Map();
+const platformSessions = new Map();
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL não encontrado. Crie backend/.env usando backend/.env.example.");
@@ -178,6 +179,21 @@ async function authUser(request) {
   return result.rows[0] || null;
 }
 
+function platformAdminConfigured() {
+  return Boolean(process.env.PLATFORM_ADMIN_USER && process.env.PLATFORM_ADMIN_PASSWORD);
+}
+
+function authPlatformAdmin(request) {
+  const header = request.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const session = platformSessions.get(token);
+  if (!session || session.expiresAt < Date.now()) {
+    platformSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
 async function loadState(empresaId) {
   const [users, settings, customers, entries, audit] = await Promise.all([
     db.query("select * from usuarios where empresa_id = $1 order by criado_em asc", [empresaId]),
@@ -233,12 +249,154 @@ async function getOrCreateCustomer(user, body) {
   return created.rows[0];
 }
 
+async function createCompanyAccess(body) {
+  const marketName = String(body.marketName || "").trim();
+  const marketPhone = String(body.marketPhone || "").trim();
+  const ownerName = String(body.ownerName || "").trim();
+  const username = String(body.username || "").trim().toLowerCase();
+  const password = String(body.password || "");
+
+  if (!marketName || !ownerName || username.length < 3 || password.length < 4) {
+    const error = new Error("Preencha mercado, responsavel, usuario e senha.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const existingUser = await db.query("select id from usuarios where lower(usuario) = $1 limit 1", [username]);
+  if (existingUser.rowCount) {
+    const error = new Error("Esse usuario ja esta em uso. Escolha outro login para o mercado.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const client = await db.connect();
+  try {
+    await client.query("begin");
+    const empresa = await client.query("insert into empresas (nome, telefone) values ($1, $2) returning *", [
+      marketName,
+      marketPhone,
+    ]);
+    const empresaId = empresa.rows[0].id;
+    const userResult = await client.query(
+      `insert into usuarios (empresa_id, nome, usuario, senha_hash, perfil)
+       values ($1, $2, $3, $4, 'Administrador')
+       returning *`,
+      [empresaId, ownerName, username, hashPassword(password)]
+    );
+    await client.query(
+      `insert into configuracoes
+        (empresa_id, nome_mercado, telefone_mercado, mensagem_cobranca, limite_operador)
+       values ($1, $2, $3, $4, 0)`,
+      [empresaId, marketName, marketPhone, defaultSettings.chargeMessage]
+    );
+    await client.query(
+      `insert into auditoria (empresa_id, usuario_id, usuario_nome, acao, detalhe)
+       values ($1, $2, $3, $4, $5)`,
+      [empresaId, userResult.rows[0].id, ownerName, "Empresa cadastrada", marketName]
+    );
+    await client.query("commit");
+    return { company: empresa.rows[0], user: publicUser(userResult.rows[0]) };
+  } catch (error) {
+    await client.query("rollback");
+    if (error.code === "23505") {
+      error.statusCode = 409;
+      error.message = "Esse usuario ja existe.";
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function loadPlatformCompanies() {
+  const result = await db.query(
+    `select
+       e.id,
+       e.nome,
+       e.telefone,
+       e.criado_em,
+       coalesce(u.total, 0) as usuarios,
+       coalesce(c.total, 0) as clientes,
+       coalesce(l.total, 0) as lancamentos,
+       coalesce(l.saldo, 0) as saldo
+     from empresas e
+     left join (
+       select empresa_id, count(*) as total
+       from usuarios
+       group by empresa_id
+     ) u on u.empresa_id = e.id
+     left join (
+       select empresa_id, count(*) as total
+       from clientes
+       group by empresa_id
+     ) c on c.empresa_id = e.id
+     left join (
+       select
+         empresa_id,
+         count(*) as total,
+         sum(case when tipo = 'debt' then valor when tipo = 'payment' then -valor else 0 end) as saldo
+       from lancamentos
+       group by empresa_id
+     ) l on l.empresa_id = e.id
+     order by e.criado_em desc`
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    marketName: row.nome,
+    marketPhone: row.telefone || "",
+    createdAt: row.criado_em,
+    usersCount: Number(row.usuarios || 0),
+    customersCount: Number(row.clientes || 0),
+    entriesCount: Number(row.lancamentos || 0),
+    openBalance: Number(row.saldo || 0),
+  }));
+}
+
 async function handleApi(request, response, pathname) {
   if (request.method === "OPTIONS") return sendJson(response, 200, { ok: true });
 
   await seedIfEmpty();
 
+  if (request.method === "POST" && pathname === "/api/platform/login") {
+    const body = await readBody(request);
+    const username = String(body.username || "").trim().toLowerCase();
+    if (!platformAdminConfigured()) {
+      return sendJson(response, 503, { error: "Admin da plataforma nao configurado no servidor." });
+    }
+    if (username !== String(process.env.PLATFORM_ADMIN_USER).trim().toLowerCase()) {
+      return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
+    }
+    if (String(body.password || "") !== process.env.PLATFORM_ADMIN_PASSWORD) {
+      return sendJson(response, 401, { error: "Usuario ou senha invalidos." });
+    }
+    const token = crypto.randomBytes(32).toString("hex");
+    platformSessions.set(token, { role: "platform-admin", expiresAt: Date.now() + 1000 * 60 * 60 * 8 });
+    return sendJson(response, 200, { token, user: { name: "Administrador da plataforma", role: "Dono" } });
+  }
+
+  if (pathname.startsWith("/api/platform/")) {
+    const platformAdmin = authPlatformAdmin(request);
+    if (!platformAdmin) return sendJson(response, 401, { error: "Sessao expirada. Entre novamente." });
+
+    if (request.method === "GET" && pathname === "/api/platform/companies") {
+      return sendJson(response, 200, { companies: await loadPlatformCompanies() });
+    }
+
+    if (request.method === "POST" && pathname === "/api/platform/companies") {
+      try {
+        const created = await createCompanyAccess(await readBody(request));
+        return sendJson(response, 201, created);
+      } catch (error) {
+        return sendJson(response, error.statusCode || 500, { error: error.message || "Erro interno." });
+      }
+    }
+
+    return sendJson(response, 404, { error: "Rota nao encontrada." });
+  }
+
   if (request.method === "POST" && pathname === "/api/register") {
+    return sendJson(response, 403, { error: "Cadastro publico desativado. Solicite acesso ao administrador." });
     const body = await readBody(request);
     const marketName = String(body.marketName || "").trim();
     const marketPhone = String(body.marketPhone || "").trim();

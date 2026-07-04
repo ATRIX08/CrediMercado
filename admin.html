@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrediMercado - Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="platformLogin" class="login-screen platform-login">
+      <div class="login-info">
+        <div class="logo">CM</div>
+        <p class="kicker">Area do dono</p>
+        <h1>Controle de mercados cadastrados</h1>
+        <p>Crie acessos, acompanhe empresas ativas e mantenha o sistema fechado para clientes autorizados.</p>
+      </div>
+
+      <form id="platformLoginForm" class="login-card">
+        <div>
+          <p class="kicker">Acesso master</p>
+          <h2>Entrar como dono</h2>
+        </div>
+        <label>
+          Usuario
+          <input id="platformUsername" required autocomplete="username" />
+        </label>
+        <label>
+          Senha
+          <input id="platformPassword" required type="password" autocomplete="current-password" />
+        </label>
+        <p id="platformLoginMessage" class="message"></p>
+        <button class="primary" type="submit">Entrar no painel</button>
+        <a class="admin-link" href="/">Voltar para o login dos mercados</a>
+      </form>
+    </section>
+
+    <section id="platformApp" class="app-screen hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">CM</div>
+          <div>
+            <strong>CrediMercado</strong>
+            <span>Painel do dono</span>
+          </div>
+        </div>
+
+        <nav>
+          <button class="nav active" type="button">Empresas</button>
+        </nav>
+
+        <div class="user-box">
+          <span id="platformUser">Dono</span>
+          <button id="platformLogoutBtn" type="button">Sair</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="kicker">Administracao da plataforma</p>
+            <h1>Mercados cadastrados</h1>
+          </div>
+          <div class="top-actions">
+            <button id="refreshCompaniesBtn" type="button">Atualizar</button>
+          </div>
+        </header>
+
+        <section class="stats">
+          <article>
+            <span>Empresas</span>
+            <strong id="companiesCount">0</strong>
+          </article>
+          <article>
+            <span>Usuarios</span>
+            <strong id="platformUsersCount">0</strong>
+          </article>
+          <article>
+            <span>Clientes</span>
+            <strong id="platformCustomersCount">0</strong>
+          </article>
+          <article>
+            <span>Saldo em aberto</span>
+            <strong id="platformOpenBalance">R$ 0,00</strong>
+          </article>
+        </section>
+
+        <section class="forms-grid">
+          <article class="panel">
+            <div class="panel-title">
+              <p class="kicker">Novo contrato</p>
+              <h2>Criar mercado e acesso</h2>
+            </div>
+            <form id="companyForm" class="form-grid">
+              <label>
+                Nome do mercado
+                <input id="companyMarketName" required placeholder="Ex.: Mercado Sao Jose" />
+              </label>
+              <label>
+                Telefone do mercado
+                <input id="companyMarketPhone" placeholder="(00) 00000-0000" inputmode="tel" />
+              </label>
+              <label>
+                Responsavel
+                <input id="companyOwnerName" required placeholder="Nome do dono ou gerente" />
+              </label>
+              <label>
+                Usuario de acesso
+                <input id="companyUsername" required minlength="3" autocomplete="off" placeholder="ex.: mercadojose" />
+              </label>
+              <label class="full">
+                Senha inicial
+                <input id="companyPassword" required type="password" minlength="4" autocomplete="new-password" />
+              </label>
+              <p id="companyMessage" class="message full"></p>
+              <button class="primary full" type="submit">Criar acesso do mercado</button>
+            </form>
+          </article>
+
+          <article class="panel">
+            <div class="panel-title">
+              <p class="kicker">Controle comercial</p>
+              <h2>Como liberar um cliente</h2>
+            </div>
+            <div class="owner-checklist">
+              <span>1. Cadastre o mercado nesta tela.</span>
+              <span>2. Envie o usuario e a senha inicial para o cliente.</span>
+              <span>3. O cliente entra pela pagina principal do sistema.</span>
+              <span>4. Novos mercados so podem ser criados por aqui.</span>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel customers-panel">
+          <div class="list-header">
+            <div>
+              <p class="kicker">Base de clientes</p>
+              <h2>Todas as empresas</h2>
+              <span id="companiesResultCount">0 empresas encontradas</span>
+            </div>
+            <div class="filters">
+              <input id="companySearch" placeholder="Buscar mercado ou telefone" />
+            </div>
+          </div>
+          <div id="companiesList" class="companies-list"></div>
+        </section>
+      </main>
+    </section>
+
+    <script src="admin.js"></script>
+  </body>
+</html>
