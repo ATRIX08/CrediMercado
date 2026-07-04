@@ -1,0 +1,19 @@
+Como iniciar o backend:
+
+1. Abra o terminal nesta pasta do projeto.
+2. Rode:
+
+   cd backend
+   npm start
+
+3. Acesse no navegador:
+
+   http://127.0.0.1:3000
+
+Login inicial:
+
+Usuario: admin
+Senha: admin123
+
+Observacao:
+Os dados do backend ficam em backend/data/db.json, criado automaticamente.
