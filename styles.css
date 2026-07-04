@@ -54,7 +54,7 @@ p {
 
 .login-screen {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(330px, 420px);
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 460px);
   min-height: 100vh;
   gap: clamp(24px, 5vw, 72px);
   align-items: center;
@@ -63,6 +63,11 @@ p {
     linear-gradient(135deg, rgba(19, 33, 59, 0.95), rgba(20, 115, 79, 0.94)),
     radial-gradient(circle at 25% 20%, rgba(255, 255, 255, 0.22), transparent 30%),
     #13213b;
+}
+
+.auth-stack {
+  display: grid;
+  gap: 14px;
 }
 
 .login-info {
@@ -129,6 +134,14 @@ p {
   display: grid;
   gap: 16px;
   padding: 28px;
+}
+
+.register-card {
+  gap: 12px;
+}
+
+.register-card h2 {
+  font-size: 1.2rem;
 }
 
 .login-card h2 {
