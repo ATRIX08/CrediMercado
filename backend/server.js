@@ -515,7 +515,7 @@ http
       sendJson(response, 500, { error: error.message || "Erro interno." });
     }
   })
-  .listen(PORT, "127.0.0.1", () => {
+  .listen(PORT, "0.0.0.0", () => {
     console.log(`CrediMercado rodando em http://127.0.0.1:${PORT}`);
     console.log("Login inicial: admin / admin123");
   });
