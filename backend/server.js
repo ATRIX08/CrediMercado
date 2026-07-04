@@ -326,6 +326,18 @@ async function handleApi(request, response, pathname) {
     return sendJson(response, 200, { user: publicUser(target) });
   }
 
+  if (request.method === "DELETE" && pathname.startsWith("/api/users/")) {
+    if (!can(user, "all")) return sendJson(response, 403, { error: "Sem permissão para remover usuários." });
+    const userId = decodeURIComponent(pathname.replace("/api/users/", ""));
+    if (userId === user.id) return sendJson(response, 400, { error: "Você não pode remover seu próprio usuário." });
+    if (data.users.length === 1) return sendJson(response, 400, { error: "Mantenha pelo menos um usuário." });
+    const target = data.users.find((item) => item.id === userId);
+    data.users = data.users.filter((item) => item.id !== userId);
+    addAudit(data, user, "Usuário removido", target?.name || userId);
+    writeData(data);
+    return sendJson(response, 200, { ok: true });
+  }
+
   if (request.method === "DELETE" && pathname.startsWith("/api/customers/")) {
     if (!can(user, "all")) return sendJson(response, 403, { error: "Sem permissão para excluir cliente." });
     const customerId = decodeURIComponent(pathname.replace("/api/customers/", ""));

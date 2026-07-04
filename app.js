@@ -1,5 +1,5 @@
-const STORAGE_KEY = "credimercado_dados_v1";
-const SESSION_KEY = "credimercado_sessao_v1";
+const TOKEN_KEY = "credimercado_token_v1";
+const API_BASE = location.protocol === "file:" ? "http://127.0.0.1:3000" : "";
 
 const defaultSettings = {
   marketName: "CrediMercado",
@@ -10,26 +10,8 @@ const defaultSettings = {
   lastBackupAt: "",
 };
 
-const initialData = {
-  users: [
-    {
-      id: "admin",
-      name: "Administrador",
-      username: "admin",
-      password: "admin123",
-      role: "Administrador",
-      active: true,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: "",
-    },
-  ],
-  customers: [],
-  settings: defaultSettings,
-  audit: [],
-};
-
-let data = loadData();
-let currentUser = getCurrentUser();
+let data = { users: [], customers: [], settings: defaultSettings, audit: [] };
+let currentUser = null;
 
 const money = (value) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0);
@@ -73,37 +55,28 @@ const permissions = {
   },
 };
 
-function loadData() {
+async function api(path, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  let response;
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved?.users?.length) return migrateData(saved);
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
   } catch {
-    // Comeca limpo quando o armazenamento estiver invalido.
+    throw new Error("Backend não está ligado. Rode: cd backend && npm start");
   }
 
-  return migrateData(JSON.parse(JSON.stringify(initialData)));
-}
-
-function migrateData(saved) {
-  return {
-    users: saved.users.map((user) => ({
-      active: true,
-      lastLoginAt: "",
-      ...user,
-      role: user.role || "Operador",
-    })),
-    customers: Array.isArray(saved.customers) ? saved.customers : [],
-    settings: { ...defaultSettings, ...(saved.settings || {}) },
-    audit: Array.isArray(saved.audit) ? saved.audit : [],
-  };
-}
-
-function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-function id() {
-  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401) {
+      sessionStorage.removeItem(TOKEN_KEY);
+      currentUser = null;
+      showLogin();
+    }
+    throw new Error(body.error || "Erro no servidor.");
+  }
+  return body;
 }
 
 function today() {
@@ -124,35 +97,8 @@ function dateTimeLabel(value) {
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
 }
 
-function getCurrentUser() {
-  const userId = sessionStorage.getItem(SESSION_KEY);
-  return data.users.find((user) => user.id === userId && user.active !== false) || null;
-}
-
 function can(action) {
   return Boolean(permissions[currentUser?.role]?.[action]);
-}
-
-function addAudit(action, detail = "") {
-  data.audit.unshift({
-    id: id(),
-    action,
-    detail,
-    userId: currentUser?.id || "",
-    userName: currentUser?.name || "Sistema",
-    createdAt: new Date().toISOString(),
-  });
-  data.audit = data.audit.slice(0, 120);
-}
-
-function requireAdminPassword(reason) {
-  const password = prompt(`${reason}\n\nDigite a senha de um administrador para confirmar:`);
-  if (password === null) return false;
-  const ok = data.users.some(
-    (user) => user.active !== false && user.role === "Administrador" && user.password === password
-  );
-  if (!ok) alert("Senha de administrador inválida.");
-  return ok;
 }
 
 function balance(customer) {
@@ -164,6 +110,33 @@ function balance(customer) {
 function overdue(customer) {
   if (balance(customer) <= 0) return false;
   return customer.entries.some((entry) => entry.type === "debt" && entry.dueDate && entry.dueDate < today());
+}
+
+async function loadState() {
+  const state = await api("/api/state");
+  data = {
+    users: state.users || [],
+    customers: state.customers || [],
+    settings: { ...defaultSettings, ...(state.settings || {}) },
+    audit: state.audit || [],
+  };
+}
+
+async function restoreSession() {
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  if (!token) {
+    showLogin();
+    return;
+  }
+
+  try {
+    const result = await api("/api/me");
+    currentUser = result.user;
+    await loadState();
+    showApp();
+  } catch {
+    showLogin();
+  }
 }
 
 function showLogin() {
@@ -179,9 +152,7 @@ function showApp() {
 }
 
 function render() {
-  currentUser = getCurrentUser();
   if (!currentUser) {
-    sessionStorage.removeItem(SESSION_KEY);
     showLogin();
     return;
   }
@@ -248,7 +219,7 @@ function renderAdminStats() {
     ? dateTimeLabel(data.settings.lastBackupAt)
     : "Nunca";
   document.querySelector("#backupStatus").textContent = data.settings.lastBackupAt
-    ? `Ultimo backup exportado em ${dateTimeLabel(data.settings.lastBackupAt)}.`
+    ? `Último backup exportado em ${dateTimeLabel(data.settings.lastBackupAt)}.`
     : "Nenhum backup exportado ainda.";
 }
 
@@ -288,10 +259,41 @@ function getFilteredCustomers() {
     .sort((a, b) => balance(b) - balance(a));
 }
 
+function customerCard(customer) {
+  const template = document.querySelector("#customerTemplate");
+  const node = template.content.firstElementChild.cloneNode(true);
+  const customerBalance = balance(customer);
+
+  node.querySelector("h3").textContent = customer.name;
+  node.querySelector(".phone").textContent = customer.phone || "Sem telefone";
+  node.querySelector(".balance").textContent = money(Math.max(customerBalance, 0));
+  node.querySelector(".badges").append(...badges(customer, customerBalance));
+  node.querySelector(".entries").append(...entries(customer));
+
+  const whatsapp = node.querySelector(".whatsapp");
+  whatsapp.disabled = !can("whatsapp") || !customer.phone || customerBalance <= 0;
+  whatsapp.addEventListener("click", () => openWhatsapp(customer, customerBalance));
+
+  const remove = node.querySelector(".danger");
+  remove.disabled = !can("deleteCustomer");
+  remove.addEventListener("click", async () => {
+    if (!can("deleteCustomer")) return;
+    if (!confirm(`Excluir ${customer.name} e todo o histórico?`)) return;
+    try {
+      await api(`/api/customers/${encodeURIComponent(customer.id)}`, { method: "DELETE" });
+      await loadState();
+      render();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  return node;
+}
+
 function renderCustomers() {
   const list = document.querySelector("#customerList");
   const customers = getFilteredCustomers();
-  const template = document.querySelector("#customerTemplate");
 
   list.innerHTML = "";
   document.querySelector("#resultCount").textContent =
@@ -302,40 +304,12 @@ function renderCustomers() {
     return;
   }
 
-  customers.forEach((customer) => {
-    const node = template.content.firstElementChild.cloneNode(true);
-    const customerBalance = balance(customer);
-
-    node.querySelector("h3").textContent = customer.name;
-    node.querySelector(".phone").textContent = customer.phone || "Sem telefone";
-    node.querySelector(".balance").textContent = money(Math.max(customerBalance, 0));
-    node.querySelector(".badges").append(...badges(customer, customerBalance));
-    node.querySelector(".entries").append(...entries(customer));
-
-    const whatsapp = node.querySelector(".whatsapp");
-    whatsapp.disabled = !can("whatsapp") || !customer.phone || customerBalance <= 0;
-    whatsapp.addEventListener("click", () => openWhatsapp(customer, customerBalance));
-
-    const remove = node.querySelector(".danger");
-    remove.disabled = !can("deleteCustomer");
-    remove.addEventListener("click", () => {
-      if (!can("deleteCustomer")) return;
-      if (!confirm(`Excluir ${customer.name} e todo o histórico?`)) return;
-      if (!requireAdminPassword("Excluir cliente é uma ação permanente.")) return;
-      data.customers = data.customers.filter((item) => item.id !== customer.id);
-      addAudit("Cliente excluido", customer.name);
-      saveData();
-      render();
-    });
-
-    list.append(node);
-  });
+  customers.forEach((customer) => list.append(customerCard(customer)));
 }
 
 function renderDashboardCustomers() {
   const list = document.querySelector("#dashboardCustomerList");
   const customers = data.customers.slice().sort((a, b) => balance(b) - balance(a));
-  const template = document.querySelector("#customerTemplate");
 
   list.innerHTML = "";
   document.querySelector("#dashboardResultCount").textContent =
@@ -346,34 +320,7 @@ function renderDashboardCustomers() {
     return;
   }
 
-  customers.forEach((customer) => {
-    const node = template.content.firstElementChild.cloneNode(true);
-    const customerBalance = balance(customer);
-
-    node.querySelector("h3").textContent = customer.name;
-    node.querySelector(".phone").textContent = customer.phone || "Sem telefone";
-    node.querySelector(".balance").textContent = money(Math.max(customerBalance, 0));
-    node.querySelector(".badges").append(...badges(customer, customerBalance));
-    node.querySelector(".entries").append(...entries(customer));
-
-    const whatsapp = node.querySelector(".whatsapp");
-    whatsapp.disabled = !can("whatsapp") || !customer.phone || customerBalance <= 0;
-    whatsapp.addEventListener("click", () => openWhatsapp(customer, customerBalance));
-
-    const remove = node.querySelector(".danger");
-    remove.disabled = !can("deleteCustomer");
-    remove.addEventListener("click", () => {
-      if (!can("deleteCustomer")) return;
-      if (!confirm(`Excluir ${customer.name} e todo o histórico?`)) return;
-      if (!requireAdminPassword("Excluir cliente é uma ação permanente.")) return;
-      data.customers = data.customers.filter((item) => item.id !== customer.id);
-      addAudit("Cliente excluido", customer.name);
-      saveData();
-      render();
-    });
-
-    list.append(node);
-  });
+  customers.forEach((customer) => list.append(customerCard(customer)));
 }
 
 function badges(customer, customerBalance) {
@@ -422,8 +369,6 @@ function openWhatsapp(customer, customerBalance) {
       .replaceAll("{mercado}", data.settings.marketName || "mercado")
   );
   window.open(`https://wa.me/55${phone}?text=${text}`, "_blank");
-  addAudit("Cobrança enviada", customer.name);
-  saveData();
 }
 
 function renderUsers() {
@@ -446,7 +391,11 @@ function renderUsers() {
     actions.append(
       userButton("Editar", () => editUser(user), !can("users")),
       userButton("Senha", () => changeUserPassword(user), !can("users")),
-      userButton(user.active === false ? "Ativar" : "Bloquear", () => toggleUser(user), !can("users") || user.id === currentUser.id),
+      userButton(
+        user.active === false ? "Ativar" : "Bloquear",
+        () => toggleUser(user),
+        !can("users") || user.id === currentUser.id
+      ),
       userButton("Remover", () => removeUser(user), !can("users") || user.id === currentUser.id || data.users.length === 1)
     );
 
@@ -464,7 +413,7 @@ function userButton(text, action, disabled) {
   return button;
 }
 
-function editUser(user) {
+async function editUser(user) {
   const name = prompt("Nome do usuário:", user.name);
   if (name === null || !name.trim()) return;
   const username = prompt("Login do usuário:", user.username);
@@ -476,46 +425,61 @@ function editUser(user) {
     alert("Perfil inválido.");
     return;
   }
-  if (data.users.some((item) => item.id !== user.id && normalize(item.username) === normalize(username))) {
-    alert("Esse usuário já existe.");
-    return;
-  }
 
-  user.name = name.trim();
-  user.username = normalize(username);
-  user.role = role;
-  addAudit("Usuário editado", user.name);
-  saveData();
-  render();
+  try {
+    await api(`/api/users/${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: name.trim(), username: normalize(username), role }),
+    });
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function changeUserPassword(user) {
+async function changeUserPassword(user) {
   const password = prompt(`Nova senha para ${user.name}:`);
   if (password === null) return;
   if (password.length < 4) {
     alert("A senha precisa ter pelo menos 4 caracteres.");
     return;
   }
-  user.password = password;
-  addAudit("Senha alterada", user.name);
-  saveData();
-  renderUsers();
+
+  try {
+    await api(`/api/users/${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ password }),
+    });
+    await loadState();
+    renderUsers();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function toggleUser(user) {
-  user.active = user.active === false;
-  addAudit(user.active ? "Usuário ativado" : "Usuário bloqueado", user.name);
-  saveData();
-  render();
+async function toggleUser(user) {
+  try {
+    await api(`/api/users/${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active: user.active === false }),
+    });
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function removeUser(user) {
+async function removeUser(user) {
   if (!confirm(`Remover o usuário ${user.name}?`)) return;
-  if (!requireAdminPassword("Remover usuário é uma ação administrativa.")) return;
-  data.users = data.users.filter((item) => item.id !== user.id);
-  addAudit("Usuário removido", user.name);
-  saveData();
-  render();
+  try {
+    await api(`/api/users/${encodeURIComponent(user.id)}`, { method: "DELETE" });
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function renderSettings() {
@@ -532,8 +496,7 @@ function renderAudit() {
   const date = document.querySelector("#auditDate").value;
   const items = data.audit
     .filter((item) => {
-      const matchesText =
-        !query || normalize(`${item.action} ${item.detail} ${item.userName}`).includes(query);
+      const matchesText = !query || normalize(`${item.action} ${item.detail} ${item.userName}`).includes(query);
       const matchesDate = !date || item.createdAt?.startsWith(date);
       return matchesText && matchesDate;
     })
@@ -558,35 +521,29 @@ function renderAudit() {
   });
 }
 
-function customerByName(name) {
-  return data.customers.find((customer) => normalize(customer.name) === normalize(name));
-}
-
-document.querySelector("#loginForm").addEventListener("submit", (event) => {
+document.querySelector("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const username = normalize(document.querySelector("#loginUsername").value);
   const password = document.querySelector("#loginPassword").value;
-  const user = data.users.find((item) => normalize(item.username) === username && item.password === password);
 
-  if (!user || user.active === false) {
-    document.querySelector("#loginMessage").textContent = "Usuário bloqueado ou senha inválida.";
-    return;
+  try {
+    const result = await api("/api/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    });
+    sessionStorage.setItem(TOKEN_KEY, result.token);
+    currentUser = result.user;
+    document.querySelector("#loginMessage").textContent = "";
+    event.target.reset();
+    await loadState();
+    showApp();
+  } catch (error) {
+    document.querySelector("#loginMessage").textContent = error.message;
   }
-
-  user.lastLoginAt = new Date().toISOString();
-  currentUser = user;
-  sessionStorage.setItem(SESSION_KEY, user.id);
-  addAudit("Login realizado", user.name);
-  saveData();
-  document.querySelector("#loginMessage").textContent = "";
-  event.target.reset();
-  showApp();
 });
 
 document.querySelector("#logoutBtn").addEventListener("click", () => {
-  addAudit("Logout realizado", currentUser?.name || "");
-  saveData();
-  sessionStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
   currentUser = null;
   showLogin();
 });
@@ -605,114 +562,95 @@ document.querySelectorAll(".nav").forEach((button) => {
   });
 });
 
-document.querySelector("#debtForm").addEventListener("submit", (event) => {
+document.querySelector("#debtForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!can("debt")) return;
-  const amount = Number(document.querySelector("#debtAmount").value);
-  const limit = Number(data.settings.operatorLimit || 0);
 
-  if (currentUser.role === "Operador" && limit > 0 && amount > limit) {
-    alert(`Seu perfil permite lançamentos de até ${money(limit)}.`);
-    return;
+  try {
+    await api("/api/debts", {
+      method: "POST",
+      body: JSON.stringify({
+        customerName: document.querySelector("#customerName").value,
+        customerPhone: document.querySelector("#customerPhone").value,
+        amount: Number(document.querySelector("#debtAmount").value),
+        dueDate: document.querySelector("#dueDate").value,
+        note: document.querySelector("#debtNote").value.trim(),
+      }),
+    });
+    event.target.reset();
+    document.querySelector("#dueDate").value = today();
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
   }
-
-  let customer = customerByName(document.querySelector("#customerName").value);
-
-  if (!customer) {
-    customer = {
-      id: id(),
-      name: document.querySelector("#customerName").value.trim(),
-      phone: document.querySelector("#customerPhone").value.trim(),
-      entries: [],
-      createdAt: new Date().toISOString(),
-    };
-    data.customers.push(customer);
-  } else if (document.querySelector("#customerPhone").value.trim()) {
-    customer.phone = document.querySelector("#customerPhone").value.trim();
-  }
-
-  customer.entries.push({
-    id: id(),
-    type: "debt",
-    amount,
-    dueDate: document.querySelector("#dueDate").value,
-    note: document.querySelector("#debtNote").value.trim(),
-    createdAt: new Date().toISOString(),
-    userId: currentUser.id,
-  });
-
-  addAudit("Dívida lançada", `${customer.name} - ${money(amount)}`);
-  event.target.reset();
-  document.querySelector("#dueDate").value = today();
-  saveData();
-  render();
 });
 
-document.querySelector("#paymentForm").addEventListener("submit", (event) => {
+document.querySelector("#paymentForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!can("payment")) return;
-  const customer = data.customers.find((item) => item.id === document.querySelector("#paymentCustomer").value);
-  const amount = Number(document.querySelector("#paymentAmount").value);
 
-  if (!customer) return;
-
-  customer.entries.push({
-    id: id(),
-    type: "payment",
-    amount,
-    date: document.querySelector("#paymentDate").value || today(),
-    paymentMethod: document.querySelector("#paymentMethod").value,
-    note: document.querySelector("#paymentNote").value.trim(),
-    createdAt: new Date().toISOString(),
-    userId: currentUser.id,
-  });
-
-  addAudit("Pagamento registrado", `${customer.name} - ${money(amount)}`);
-  event.target.reset();
-  document.querySelector("#paymentDate").value = today();
-  saveData();
-  render();
+  try {
+    await api("/api/payments", {
+      method: "POST",
+      body: JSON.stringify({
+        customerId: document.querySelector("#paymentCustomer").value,
+        amount: Number(document.querySelector("#paymentAmount").value),
+        date: document.querySelector("#paymentDate").value || today(),
+        paymentMethod: document.querySelector("#paymentMethod").value,
+        note: document.querySelector("#paymentNote").value.trim(),
+      }),
+    });
+    event.target.reset();
+    document.querySelector("#paymentDate").value = today();
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
-document.querySelector("#userForm").addEventListener("submit", (event) => {
+document.querySelector("#userForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!can("users")) return;
-  const username = normalize(document.querySelector("#newUsername").value);
 
-  if (data.users.some((user) => normalize(user.username) === username)) {
-    alert("Esse usuário já existe.");
-    return;
+  try {
+    await api("/api/users", {
+      method: "POST",
+      body: JSON.stringify({
+        name: document.querySelector("#newUserName").value.trim(),
+        username: document.querySelector("#newUsername").value,
+        password: document.querySelector("#newUserPassword").value,
+        role: document.querySelector("#newUserRole").value,
+      }),
+    });
+    event.target.reset();
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
   }
-
-  const user = {
-    id: id(),
-    name: document.querySelector("#newUserName").value.trim(),
-    username,
-    password: document.querySelector("#newUserPassword").value,
-    role: document.querySelector("#newUserRole").value,
-    active: true,
-    createdAt: new Date().toISOString(),
-    lastLoginAt: "",
-  };
-
-  data.users.push(user);
-  addAudit("Usuário cadastrado", user.name);
-  event.target.reset();
-  saveData();
-  render();
 });
 
-document.querySelector("#settingsForm").addEventListener("submit", (event) => {
+document.querySelector("#settingsForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!can("settings")) return;
-  data.settings.marketName = document.querySelector("#marketName").value.trim() || "CrediMercado";
-  data.settings.marketPhone = document.querySelector("#marketPhone").value.trim();
-  data.settings.operatorLimit = Number(document.querySelector("#operatorLimit").value) || 0;
-  data.settings.chargeMessage =
-    document.querySelector("#chargeMessage").value.trim() || defaultSettings.chargeMessage;
-  addAudit("Configurações alteradas", data.settings.marketName);
-  saveData();
-  render();
+
+  try {
+    await api("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify({
+        marketName: document.querySelector("#marketName").value.trim() || "CrediMercado",
+        marketPhone: document.querySelector("#marketPhone").value.trim(),
+        operatorLimit: Number(document.querySelector("#operatorLimit").value) || 0,
+        chargeMessage: document.querySelector("#chargeMessage").value.trim() || defaultSettings.chargeMessage,
+      }),
+    });
+    await loadState();
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
 document.querySelector("#searchInput").addEventListener("input", renderCustomers);
@@ -720,41 +658,35 @@ document.querySelector("#statusFilter").addEventListener("change", renderCustome
 document.querySelector("#auditSearch").addEventListener("input", renderAudit);
 document.querySelector("#auditDate").addEventListener("change", renderAudit);
 
-document.querySelector("#exportBtn").addEventListener("click", () => {
+document.querySelector("#exportBtn").addEventListener("click", async () => {
   if (!can("backup")) return;
-  data.settings.lastBackupAt = new Date().toISOString();
-  addAudit("Backup exportado", "Arquivo JSON");
-  saveData();
-  renderAdminStats();
-
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `backup-credimercado-${today()}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
+  try {
+    const backup = await api("/api/export");
+    await loadState();
+    renderAdminStats();
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `backup-credimercado-${today()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert(error.message);
+  }
 });
 
 document.querySelector("#importInput").addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file || !can("backup")) return;
-  if (!requireAdminPassword("Importar backup vai substituir os dados atuais.")) {
-    event.target.value = "";
-    return;
-  }
 
   try {
-    const imported = migrateData(JSON.parse(await file.text()));
-    data = imported;
-    currentUser = getCurrentUser();
-    if (!currentUser) {
-      sessionStorage.removeItem(SESSION_KEY);
-      showLogin();
-      return;
-    }
-    addAudit("Backup importado", file.name);
-    saveData();
+    const imported = JSON.parse(await file.text());
+    await api("/api/import", {
+      method: "POST",
+      body: JSON.stringify(imported),
+    });
+    await loadState();
     render();
   } catch {
     alert("Não foi possível importar esse backup.");
@@ -765,10 +697,4 @@ document.querySelector("#importInput").addEventListener("change", async (event) 
 
 document.querySelector("#dueDate").value = today();
 document.querySelector("#paymentDate").value = today();
-saveData();
-
-if (currentUser) {
-  showApp();
-} else {
-  showLogin();
-}
+restoreSession();
