@@ -1,12 +1,22 @@
-Como iniciar o backend:
+Como iniciar o backend com Supabase/PostgreSQL:
 
-1. Abra o terminal nesta pasta do projeto.
-2. Rode:
+1. Crie o arquivo backend/.env usando backend/.env.example.
+2. Coloque a DATABASE_URL do Supabase no .env.
+3. Instale as dependencias:
 
    cd backend
+   npm install
+
+4. Crie as tabelas no Supabase:
+
+   cd backend
+   npm run migrate
+
+5. Inicie o sistema:
+
    npm start
 
-3. Acesse no navegador:
+6. Acesse no navegador:
 
    http://127.0.0.1:3000
 
@@ -16,4 +26,5 @@ Usuario: admin
 Senha: admin123
 
 Observacao:
-Os dados do backend ficam em backend/data/db.json, criado automaticamente.
+Os dados ficam no PostgreSQL/Supabase.
+Nunca envie backend/.env para o GitHub.
