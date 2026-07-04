@@ -65,11 +65,6 @@ p {
     #13213b;
 }
 
-.auth-stack {
-  display: grid;
-  gap: 14px;
-}
-
 .login-info {
   max-width: 720px;
   color: #fff;
@@ -134,14 +129,6 @@ p {
   display: grid;
   gap: 16px;
   padding: 28px;
-}
-
-.register-card {
-  gap: 12px;
-}
-
-.register-card h2 {
-  font-size: 1.2rem;
 }
 
 .login-card h2 {

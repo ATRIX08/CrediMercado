@@ -15,8 +15,7 @@
         <p>Controle clientes, fiado, pagamentos, vencimentos e cobranças pelo WhatsApp em uma tela simples.</p>
       </div>
 
-      <div class="auth-stack">
-        <form id="loginForm" class="login-card">
+      <form id="loginForm" class="login-card">
           <div>
             <p class="kicker">Acesso restrito</p>
             <h2>Entrar no sistema</h2>
@@ -32,37 +31,9 @@
           <p id="loginMessage" class="message"></p>
           <button class="primary" type="submit">Entrar</button>
           <small>Acesso liberado somente pelo administrador do CrediMercado.</small>
-        </form>
+      </form>
 
-        <form id="registerCompanyForm" class="login-card register-card hidden">
-          <div>
-            <p class="kicker">Novo cliente</p>
-            <h2>Cadastrar mercado</h2>
-          </div>
-          <label>
-            Nome do mercado
-            <input id="registerMarketName" required placeholder="Ex.: Mercado São José" />
-          </label>
-          <label>
-            Telefone do mercado
-            <input id="registerMarketPhone" placeholder="(00) 00000-0000" inputmode="tel" />
-          </label>
-          <label>
-            Nome do responsável
-            <input id="registerOwnerName" required placeholder="Nome do dono ou gerente" />
-          </label>
-          <label>
-            Usuário de acesso
-            <input id="registerUsername" required minlength="3" autocomplete="username" placeholder="ex.: mercadojose" />
-          </label>
-          <label>
-            Senha
-            <input id="registerPassword" required type="password" minlength="4" autocomplete="new-password" />
-          </label>
-          <p id="registerMessage" class="message"></p>
-          <button class="secondary" type="submit">Criar conta do mercado</button>
-        </form>
-      </div>
+
     </section>
 
     <section id="appScreen" class="app-screen hidden">

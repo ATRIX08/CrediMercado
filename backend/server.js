@@ -444,55 +444,6 @@ async function handleApi(request, response, pathname) {
 
   if (request.method === "POST" && pathname === "/api/register") {
     return sendJson(response, 403, { error: "Cadastro publico desativado. Solicite acesso ao administrador." });
-    const body = await readBody(request);
-    const marketName = String(body.marketName || "").trim();
-    const marketPhone = String(body.marketPhone || "").trim();
-    const ownerName = String(body.ownerName || "").trim();
-    const username = String(body.username || "").trim().toLowerCase();
-    const password = String(body.password || "");
-
-    if (!marketName || !ownerName || username.length < 3 || password.length < 4) {
-      return sendJson(response, 400, { error: "Preencha mercado, responsável, usuário e senha." });
-    }
-
-    const client = await db.connect();
-    try {
-      await client.query("begin");
-      const empresa = await client.query("insert into empresas (nome, telefone) values ($1, $2) returning id", [
-        marketName,
-        marketPhone,
-      ]);
-      const empresaId = empresa.rows[0].id;
-      const userResult = await client.query(
-        `insert into usuarios (empresa_id, nome, usuario, senha_hash, perfil)
-         values ($1, $2, $3, $4, 'Administrador')
-         returning *`,
-        [empresaId, ownerName, username, hashPassword(password)]
-      );
-      await client.query(
-        `insert into configuracoes
-          (empresa_id, nome_mercado, telefone_mercado, mensagem_cobranca, limite_operador)
-         values ($1, $2, $3, $4, 0)`,
-        [empresaId, marketName, marketPhone, defaultSettings.chargeMessage]
-      );
-      await client.query(
-        `insert into auditoria (empresa_id, usuario_id, usuario_nome, acao, detalhe)
-         values ($1, $2, $3, $4, $5)`,
-        [empresaId, userResult.rows[0].id, ownerName, "Empresa cadastrada", marketName]
-      );
-      await client.query("commit");
-
-      const user = userResult.rows[0];
-      const token = crypto.randomBytes(32).toString("hex");
-      sessions.set(token, { userId: user.id, empresaId: user.empresa_id, expiresAt: Date.now() + 1000 * 60 * 60 * 8 });
-      return sendJson(response, 201, { token, user: publicUser(user) });
-    } catch (error) {
-      await client.query("rollback");
-      if (error.code === "23505") return sendJson(response, 409, { error: "Esse usuário já existe nesse mercado." });
-      throw error;
-    } finally {
-      client.release();
-    }
   }
 
   if (request.method === "POST" && pathname === "/api/login") {

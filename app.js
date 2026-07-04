@@ -542,32 +542,6 @@ document.querySelector("#loginForm").addEventListener("submit", async (event) =>
   }
 });
 
-document.querySelector("#registerCompanyForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  try {
-    const result = await api("/api/register", {
-      method: "POST",
-      body: JSON.stringify({
-        marketName: document.querySelector("#registerMarketName").value.trim(),
-        marketPhone: document.querySelector("#registerMarketPhone").value.trim(),
-        ownerName: document.querySelector("#registerOwnerName").value.trim(),
-        username: document.querySelector("#registerUsername").value.trim(),
-        password: document.querySelector("#registerPassword").value,
-      }),
-    });
-
-    sessionStorage.setItem(TOKEN_KEY, result.token);
-    currentUser = result.user;
-    document.querySelector("#registerMessage").textContent = "";
-    event.target.reset();
-    await loadState();
-    showApp();
-  } catch (error) {
-    document.querySelector("#registerMessage").textContent = error.message;
-  }
-});
-
 document.querySelector("#logoutBtn").addEventListener("click", () => {
   sessionStorage.removeItem(TOKEN_KEY);
   currentUser = null;
