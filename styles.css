@@ -586,6 +586,11 @@ nav {
   background: #fff;
 }
 
+.blocked-company {
+  border-color: #f2c4c2;
+  background: #fff8f8;
+}
+
 .company-card h3,
 .company-card span,
 .platform-customer-card h3,
@@ -620,6 +625,16 @@ nav {
   color: var(--green-dark);
   font-size: 0.82rem;
   font-weight: 900;
+}
+
+.company-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 120px;
+}
+
+.company-actions button {
+  min-width: 112px;
 }
 
 .audit-filters {
@@ -782,6 +797,11 @@ nav {
   .company-metrics {
     grid-template-columns: 1fr;
     text-align: left;
+  }
+
+  .company-actions,
+  .company-actions button {
+    width: 100%;
   }
 
   .top-actions,

@@ -4,8 +4,15 @@ create table if not exists empresas (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   telefone text,
+  ativo boolean not null default true,
+  motivo_bloqueio text,
+  bloqueado_em timestamptz,
   criado_em timestamptz not null default now()
 );
+
+alter table empresas add column if not exists ativo boolean not null default true;
+alter table empresas add column if not exists motivo_bloqueio text;
+alter table empresas add column if not exists bloqueado_em timestamptz;
 
 create table if not exists usuarios (
   id uuid primary key default gen_random_uuid(),

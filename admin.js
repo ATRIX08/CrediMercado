@@ -90,6 +90,7 @@ function renderStats() {
   document.querySelector("#platformOpenBalance").textContent = money(
     companies.reduce((sum, item) => sum + Math.max(item.openBalance, 0), 0)
   );
+  document.querySelector("#blockedCompaniesCount").textContent = companies.filter((item) => item.active === false).length;
 }
 
 function renderCompanies() {
@@ -107,21 +108,56 @@ function renderCompanies() {
 
   items.forEach((company) => {
     const row = document.createElement("article");
-    row.className = "company-card";
+    row.className = `company-card ${company.active === false ? "blocked-company" : ""}`;
     row.innerHTML = `
       <div>
         <h3>${company.marketName}</h3>
         <span>${company.marketPhone || "Sem telefone"} - criada em ${dateTimeLabel(company.createdAt)}</span>
+        <span>${company.active === false ? `Bloqueada: ${company.blockReason || "Sem motivo informado"}` : "Ativa"}</span>
       </div>
       <div class="company-metrics">
+        <span>${company.active === false ? "Bloqueada" : "Ativa"}</span>
         <span>${company.usersCount} usuario(s)</span>
         <span>${company.customersCount} cliente(s)</span>
         <span>${company.entriesCount} lancamento(s)</span>
         <strong>${money(Math.max(company.openBalance, 0))}</strong>
       </div>
     `;
+    const actions = document.createElement("div");
+    actions.className = "company-actions";
+    const statusButton = document.createElement("button");
+    statusButton.type = "button";
+    statusButton.className = company.active === false ? "primary" : "danger";
+    statusButton.textContent = company.active === false ? "Desbloquear" : "Bloquear";
+    statusButton.addEventListener("click", () => toggleCompanyStatus(company));
+    actions.append(statusButton);
+    row.append(actions);
     list.append(row);
   });
+}
+
+async function toggleCompanyStatus(company) {
+  const willBlock = company.active !== false;
+  let reason = "";
+  if (willBlock) {
+    reason = prompt("Motivo do bloqueio:", "Falta de pagamento");
+    if (reason === null) return;
+    if (!reason.trim()) reason = "Assinatura bloqueada pelo administrador";
+    if (!confirm(`Bloquear o acesso de ${company.marketName}?`)) return;
+  } else if (!confirm(`Desbloquear o acesso de ${company.marketName}?`)) {
+    return;
+  }
+
+  try {
+    await platformApi(`/api/platform/companies/${encodeURIComponent(company.id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active: !willBlock, reason }),
+    });
+    await Promise.all([loadCompanies(), loadCustomers()]);
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function renderCustomers() {

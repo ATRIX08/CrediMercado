@@ -142,7 +142,7 @@ async function seedIfEmpty() {
   const result = await db.query("select id from empresas limit 1");
   if (result.rowCount) return;
 
-  const empresa = await db.query("insert into empresas (nome) values ($1) returning id", ["CrediMercado"]);
+  const empresa = await db.query("insert into empresas (nome, ativo) values ($1, true) returning id", ["CrediMercado"]);
   const empresaId = empresa.rows[0].id;
   const admin = await db.query(
     `insert into usuarios (empresa_id, nome, usuario, senha_hash, perfil)
@@ -175,7 +175,13 @@ async function authUser(request) {
     sessions.delete(token);
     return null;
   }
-  const result = await db.query("select * from usuarios where id = $1 and ativo = true", [session.userId]);
+  const result = await db.query(
+    `select u.*
+     from usuarios u
+     join empresas e on e.id = u.empresa_id
+     where u.id = $1 and u.ativo = true and e.ativo = true`,
+    [session.userId]
+  );
   return result.rows[0] || null;
 }
 
@@ -272,7 +278,7 @@ async function createCompanyAccess(body) {
   const client = await db.connect();
   try {
     await client.query("begin");
-    const empresa = await client.query("insert into empresas (nome, telefone) values ($1, $2) returning *", [
+    const empresa = await client.query("insert into empresas (nome, telefone, ativo) values ($1, $2, true) returning *", [
       marketName,
       marketPhone,
     ]);
@@ -314,6 +320,9 @@ async function loadPlatformCompanies() {
        e.id,
        e.nome,
        e.telefone,
+       e.ativo,
+       e.motivo_bloqueio,
+       e.bloqueado_em,
        e.criado_em,
        coalesce(u.total, 0) as usuarios,
        coalesce(c.total, 0) as clientes,
@@ -345,6 +354,9 @@ async function loadPlatformCompanies() {
     id: row.id,
     marketName: row.nome,
     marketPhone: row.telefone || "",
+    active: row.ativo !== false,
+    blockReason: row.motivo_bloqueio || "",
+    blockedAt: row.bloqueado_em || "",
     createdAt: row.criado_em,
     usersCount: Number(row.usuarios || 0),
     customersCount: Number(row.clientes || 0),
@@ -439,6 +451,24 @@ async function handleApi(request, response, pathname) {
       }
     }
 
+    if (request.method === "PATCH" && pathname.startsWith("/api/platform/companies/")) {
+      const companyId = decodeURIComponent(pathname.replace("/api/platform/companies/", ""));
+      const body = await readBody(request);
+      const active = body.active !== false;
+      const reason = String(body.reason || "").trim();
+      const result = await db.query(
+        `update empresas
+         set ativo = $1,
+             motivo_bloqueio = case when $1 then null else $2 end,
+             bloqueado_em = case when $1 then null else now() end
+         where id = $3
+         returning id`,
+        [active, reason || "Assinatura bloqueada pelo administrador", companyId]
+      );
+      if (!result.rowCount) return sendJson(response, 404, { error: "Empresa nao encontrada." });
+      return sendJson(response, 200, { ok: true });
+    }
+
     return sendJson(response, 404, { error: "Rota nao encontrada." });
   }
 
@@ -450,12 +480,24 @@ async function handleApi(request, response, pathname) {
     const body = await readBody(request);
     const username = String(body.username || "").trim().toLowerCase();
     const userResult = await db.query(
-      `select * from usuarios where lower(usuario) = $1 and ativo = true order by criado_em asc limit 1`,
+      `select
+         u.*,
+         e.ativo as empresa_ativa,
+         e.motivo_bloqueio as empresa_motivo_bloqueio
+       from usuarios u
+       join empresas e on e.id = u.empresa_id
+       where lower(u.usuario) = $1 and u.ativo = true
+       order by u.criado_em asc
+       limit 1`,
       [username]
     );
     const user = userResult.rows[0];
     if (!user || !verifyPassword(body.password || "", user.senha_hash)) {
       return sendJson(response, 401, { error: "Usuário bloqueado ou senha inválida." });
+    }
+    if (user.empresa_ativa === false) {
+      const reason = user.empresa_motivo_bloqueio ? ` Motivo: ${user.empresa_motivo_bloqueio}` : "";
+      return sendJson(response, 403, { error: `Conta do mercado bloqueada.${reason}` });
     }
     await db.query("update usuarios set ultimo_acesso = now() where id = $1", [user.id]);
     user.ultimo_acesso = new Date().toISOString();
