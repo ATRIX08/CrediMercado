@@ -130,7 +130,12 @@ function renderCompanies() {
     statusButton.className = company.active === false ? "primary" : "danger";
     statusButton.textContent = company.active === false ? "Desbloquear" : "Bloquear";
     statusButton.addEventListener("click", () => toggleCompanyStatus(company));
-    actions.append(statusButton);
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "danger";
+    deleteButton.textContent = "Excluir";
+    deleteButton.addEventListener("click", () => deleteCompany(company));
+    actions.append(statusButton, deleteButton);
     row.append(actions);
     list.append(row);
   });
@@ -153,6 +158,22 @@ async function toggleCompanyStatus(company) {
       method: "PATCH",
       body: JSON.stringify({ active: !willBlock, reason }),
     });
+    await Promise.all([loadCompanies(), loadCustomers()]);
+    render();
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+async function deleteCompany(company) {
+  const warning =
+    `Excluir ${company.marketName} vai apagar a empresa, usuarios, clientes, dividas e pagamentos dela.`;
+  if (!confirm(warning)) return;
+  const typed = prompt('Para confirmar a exclusao definitiva, digite EXCLUIR:');
+  if (typed !== "EXCLUIR") return;
+
+  try {
+    await platformApi(`/api/platform/companies/${encodeURIComponent(company.id)}`, { method: "DELETE" });
     await Promise.all([loadCompanies(), loadCustomers()]);
     render();
   } catch (error) {

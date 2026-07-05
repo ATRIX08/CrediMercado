@@ -469,6 +469,13 @@ async function handleApi(request, response, pathname) {
       return sendJson(response, 200, { ok: true });
     }
 
+    if (request.method === "DELETE" && pathname.startsWith("/api/platform/companies/")) {
+      const companyId = decodeURIComponent(pathname.replace("/api/platform/companies/", ""));
+      const result = await db.query("delete from empresas where id = $1 returning nome", [companyId]);
+      if (!result.rowCount) return sendJson(response, 404, { error: "Empresa nao encontrada." });
+      return sendJson(response, 200, { ok: true, deleted: result.rows[0].nome });
+    }
+
     return sendJson(response, 404, { error: "Rota nao encontrada." });
   }
 
